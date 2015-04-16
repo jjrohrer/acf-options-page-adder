@@ -793,4 +793,4 @@ class acfOptionsPageAdder {
 } // end class acfOptionsPageAdder
 
 //jjr
-require_once(__DIR__ . "/jSins.php");
+//require_once(__DIR__ . "/jSins.php");
