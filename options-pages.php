@@ -318,7 +318,20 @@ class acfOptionsPageAdder {
         return $field;
     } // end public function
 
+
     public function admin_columns($columns) {
+        global $_REQUEST;
+        if (isset($_REQUEST['import_post_id']) && isset($_REQUEST['import_post_name']) ) {
+
+            $asrPosts = static::asrCompoundPosts_via_serFiles();
+            $asrPostToImport = $asrPosts[$_REQUEST['import_post_name']];
+            $post_id_to_update = $_REQUEST['import_post_id'];
+            static::update_dbCompoundPost($post_id_to_update,$asrPostToImport);
+//            remove_query_arg($_REQUEST['import_post_id']);
+//            remove_query_arg($_REQUEST['import_post_name']);
+            unset($_REQUEST['import_post_id'],$_REQUEST['import_post_name']);//<-- um, probably this whole section is the wrong place, but we'll hack it
+        }
+
         $new_columns = array();
         foreach ($columns as $index => $column) {
             if ($index == 'title') {
@@ -401,16 +414,15 @@ class acfOptionsPageAdder {
 
                 } else {
                     if ($_REQUEST['print_jsonified'] == $post_id) {
-                        $objPost = acfOptionsPageAdder::post_id_to_jsonified($post_id);
-                        $asrMeta = get_post_meta($post_id);
-                        $asrMock = ['cpt' => $objPost, 'meta' => $asrMeta];
+                        $asrPost = static::asrCompoundPost_via_id($post_id);
+                        $serPost = static::serFile_asrCompoundPost_via_id($post_id);
 
-                        $jsonMock = json_encode($asrMock);
 
-                        $fileName = "{$post_id}.json";
+
+                        $fileName = $asrPost['cpt']['post_name'].'.json';
                         $extraText = "
                 <br>
-                To creat a persistent version, copy this into a dir/file in your plugin called: 'DynaDevConfig_acf_options_page/$fileName'
+                To creat a persistent version, copy the json (below) into a dir/file in your plugin or theme directly called: 'DynaDevConfig/acf_options_page/$fileName'
                 <hr>
                 Don't forget to add a blank 'index.php' file into your dir for safety.
                 <hr>
@@ -420,42 +432,69 @@ class acfOptionsPageAdder {
                 <br><br>
                 ClsDynaDevSyncHelper::be_configured_for_acf_options_page(__FILE__);
                 <hr>
-                " . $jsonMock;
+                " . $serPost;
                     } else {
-                        #$extraText = '---'.$_REQUEST['print_jsonified'] . " != ".$post_id;
+                        //$extraText = '---'.$_REQUEST['print_jsonified'] . " != ".$post_id;
                     }
                 }
 
                 // indicate cache status / ownership (stooopid)
-                $asrPosts = acfOptionsPageAdder::get_asr_posts();
-                $html = '[';
+                $asrPosts = acfOptionsPageAdder::get_net_asrCompountPosts();
+                $html = '<br>';
                 $sep = '';
-                foreach ($asrPosts['asrNetPosts'] as $this_post_id => $asrPost) {
-//                print "<pre>";
-//                print_r($asrPost);
-//                print "</pre>";
-                    // if you had time, you would
-                    $innerText = '';
-                    $title = '';
-                    if ($this_post_id == $post_id) {
-                        $innerText .= "$sep<span style='background-color:yellow;'>{$asrPost->post_title}</span>";
+
+                foreach ($asrPosts['asrNetPosts'] as $a_post_name => $asrPost) {
+                    $objThisPost = get_post($post_id,'post_name');
+                    $the_row_post_name = $objThisPost->post_name;// careful...
+                    if ( $the_row_post_name == $a_post_name) {
+                        $hasHtml = '';
+
+                        $hasHtml .= "<span title='{$asrPost['source_comment']}'>{$asrPost['source_heritage']}^</span>";
+                        if ($asrPost['source_heritage'] == 'db < json') {
+                            $url = add_query_arg(["import_post_id"=> $post_id, "import_post_name"=> $a_post_name]);
+                            $hasHtml .= " <a href='$url'>Click to update db with latest json</a>";
+                        }
+                        if ($asrPost['source_heritage'] == 'db > json') {
+                            $url = add_query_arg(["export_post_id"=> $post_id, "export_post_name"=> $a_post_name]);
+                            $hasHtml .= " <a href='$url'>Click to update sync db to json (tbd)</a>";
+                        }
+
+
+                        $html .= " $hasHtml ";//"<span title='$title'>$innerText</span> ";
+
+
                     } else {
-                        $innerText .= $sep . $asrPost->post_title;
+                        //$innerText .= $sep . $the_row_post_name;
                     }
-                    if (in_array($this_post_id, array_keys($asrPosts['asrDbPosts']))) {
-                        $innerText .= " <-- db";
-                        $title .= 'These settings are stored and retrieved from the database, not disk.';
-                    }
-                    if (in_array($this_post_id, array_keys($asrPosts['asrJsonPosts']))) {
-                        $innerText .= " <-- json ({$asrPosts['asrJsonPosts'][$this_post_id]->plugin_basename})";
-                        $title .= 'These settings are stored and retrieved from the json file on disk.  If I have a db copy, it is ignored.';
-                    }
-                    $html .= "<span title='$title'>$innerText</span>";
-                    $sep = '<br>&nbsp;';
+
+
 
                 }
-                $html .= ']';
-                $extraText .= '<hr>' . $html;
+
+                // Add items that are json only - we'll redundantly add it to the bottom of each row.  It would be way better somewhere else on the page
+                if (!empty($asrPosts['asrOnlyJson'])) {
+                    $html .= "<hr>==JSON only items that shouldn't be repeated each ,==<br>";
+                }
+                foreach ($asrPosts['asrOnlyJson'] as $a_post_name => $asrPost) {
+                    $hasHtml = '';
+                    $innerText = '';
+                    $title = '';
+                    $modText = '';
+                    $name = $asrPost->cpt->post_name;
+                    $innerText = "$name (pure json^)";// -->{$asrPosts['asrJsonPosts'][$this_post_name]->plugin_basename})";
+                    $modText = $asrPost->cpt->post_modified_gmt;
+                    $title = "modifed= $modText, src file = ".$asrPosts['asrJsonPosts'][$a_post_name]->plugin_basename;
+                    $hasHtml .= "<span title='$title'>$innerText</span>";
+                    $srcText = $asrPost->source;// ouch - this is embarrassing.  Say spegehtii!
+                    $src_comment = $asrPost->source_comment;
+                    $usesText = "<-- uses $srcText";
+                    $usesHtml = " <span title='$src_comment'>$usesText^</span>";
+                    $html .= " $hasHtml $usesHtml<br>";//"<span title='$title'>$innerText</span> ";
+
+                }
+
+                //$html .= ']';
+                $extraText .= '' . $html;
 
 
                 $url = add_query_arg('print_jsonified', $post_id);
@@ -471,6 +510,9 @@ class acfOptionsPageAdder {
                 break;
         } // end switch
     } // end public function admin_columns_content
+
+
+
 
     public function build_admin_menu_list() {
         global $menu;
@@ -560,19 +602,13 @@ class acfOptionsPageAdder {
 
 
     // ============== jjr Caching Helpers -begin- ==================================================================
-    // TODO: Somehow associate certain option pages with certain plugins
-    // TODO: Maybe just flag if json is different than the DB  - somehow keep this simple
-    // TODO: If writable, allow direct writing
-    // TODO: Don't allow editing if cachings
-    // TODO: Don't cache if in 'Dev' mode.
-    // TODO: If templates are installed, make all non-masters be templates
-    //      Look up a setting and load from there if set & plugin is active
-    // TODO: indicate which items are cached
-    // TODO: if different than DB, allow to import from cache
+    // This is largely about optionally persisting what we got from the db and being able to read the persisted form.
+    // for some reason, I had issues simply serializing - so we put everything into json - which isn't great, but not bad.
+    // Nice TODO: if WP_ENV isn't defined (in the wp-config), put a warning on this page
+    // TODO: If templates are installed, make all non-masters be templates ??
     // TODO: Make this a stand-alone plugin
-    // TODO: Load for individual pages.
+    // TODO: Offer back to community
     // History
-    // Done: Make the cache file pure json
     // Done: Export (and Load) for individual pages.
     //    For single site plugin developers, they should comment out 'be_configured_for_acf_options_page' to return
     //    off json loading.
@@ -583,17 +619,35 @@ class acfOptionsPageAdder {
     //
     //    For the multi-user admin that is doing a hot-fix: This can't happen until we can import for file.
     //
+    // WP_ENV must be set to a state of: development, staging, production
+    //  Implications:
+    //      development
+    //          Reads either DB or JSON feature.  Mildly flags if they two aren't the same.
+    //          [X] Can import JSON
+    //          [ ] Can update JSON
+    //          ( ) Fix: After import, the JSON is now, of course, outdate.  Fix date directly in db.
+    //          ( ) Add: if has both db & json and dates match, check that all values are the same
+    //      staging
+    //          Reads either DB or JSON.  Sternly FLAGS if two aren't the same
+    //          [X] Can import JSON
+    //          ( ) Add: if has both db & json and dates match, check that all values are the same
+    //      production
+    //          [ ] Only reads JSON.  Sternly FLAGS something
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
 
 
-    private function get_cache_path() {
-        $fullPathMaybe = dirname(__FILE__) . "/jCache/jCache.php";
-        return $fullPathMaybe;
-    }
 
-    static public function get_obj_posts_via_json() {
-        // Get json based items
+
+    static public function asrCompoundPosts_via_serFiles() {
         $paths = [];
-        $paths = apply_filters('acf_options_page/settings/load_json', $paths); //jjr json
+        $paths = apply_filters('acf_options_page/settings/load_json', $paths);
         $asrMocks = [];
         foreach ($paths as $path) {
             // get lists of files
@@ -601,72 +655,18 @@ class acfOptionsPageAdder {
             foreach ($arrFiles as $tailFileName) {
                 if ($tailFileName != '.' && $tailFileName != '..' && $tailFileName != 'index.php') {
                     $fullFileName = $path . '/' . $tailFileName; // nicetodo: use system separator
-                    $jsonFromFile = file_get_contents($fullFileName);
-                    $asrMock = json_decode($jsonFromFile);
-                    $asrMock->plugin_basename = plugin_basename($fullFileName);
-                    $id = $asrMock->cpt->ID;
-                    $asrMocks[$id] = $asrMock;
-
+                    $serFromFile = file_get_contents($fullFileName);
+                    $asrMock = json_decode($serFromFile,true);//true=want it back as assoc
+                    $asrMock['plugin_basename'] = plugin_basename($fullFileName);
+                    $asrMocks[$asrMock['cpt']['post_name']] = $asrMock;
                 }
             }
         }
         return $asrMocks;
     }
 
-    static function get_page_query_posts_via_db() {
-        $args = array('post_type' => static::$post_type,
-            'post_status' => 'publish',
-            'posts_per_page' => -1,
-            'order' => 'ASC');
-        $page_query = new WP_Query($args);
-        return $page_query;
-    }
 
-
-    static function get_asr_posts() {
-        // Get DB based items
-        $page_query = static::get_page_query_posts_via_db();
-        // merge
-        $arrIdsFromDb = [];
-        $asrDbPosts = [];
-        foreach ($page_query->posts as $slot => $post) {
-            $arrIdsFromDb[] = $post->ID;
-            $asrDbPosts[$post->ID] = $post;
-        }
-
-        // posts from db with id as keys
-        $asrMocks = static::get_obj_posts_via_json();
-        $asrNetPosts = $asrDbPosts;
-        foreach ($asrMocks as $id => $asrMock) {
-            if (!in_array($id, $arrIdsFromDb)) {
-                $page_query->posts[] = $asrMock->cpt;
-                $asrNetPosts[$id] = $asrMock->cpt;
-                foreach ($asrMock->meta as $key => $arrVal) {
-                    update_post_meta($id, $key, $arrVal[0]); // everytime, stoopid
-                }
-            }
-        }
-        $asr = [
-            'asrJsonPosts' => $asrMocks,
-            'asrDbPosts' => $asrDbPosts,
-            'asrNetPosts' => $asrNetPosts,
-            'page_query_to_use' => $page_query];
-        return $asr; // CPTs with data from db used over data from json.  If data isn't in db, json is used.  j
-
-    }
-
-
-    private function get_netted_obj_posts() {
-        $asrPosts = static::get_asr_posts();
-        return $asrPosts['page_query_to_use']; // json with db overrides
-
-    }
-
-    private function obj_posts_to_jsonified($page_query) {
-        return json_encode($page_query);
-    }
-
-    public static function post_id_to_jsonified($post_id) {
+    public static function asrPost_via_id($post_id) {
         // hack, 'acf-options-page' shoudl be static::$post_type, but it is not static and this object isn't available, not sure why, to ClsAcfOptionsAddedAbomination
         $args = array('post_type' => 'acf-options-page',
             'post_status' => 'publish',
@@ -674,18 +674,151 @@ class acfOptionsPageAdder {
             'p' => $post_id,
             'order' => 'ASC');
         $page_query = new WP_Query($args);
-        return $page_query->posts[0];
-
-    }
-
-    private function is_caching() {
-        if (file_exists($this->get_cache_path())) {
-            return true;
-        } else {
-            return false;
+        $objPost = $page_query->posts[0];
+        $asrPost = [];
+        foreach ($objPost as $varName=>$value) {
+            $asrPost[$varName] = $value;
         }
+        return $asrPost;
+
     }
 
+
+    static function asrCompoundPost_via_id($post_id) {
+        $asrPost = acfOptionsPageAdder::asrPost_via_id($post_id);
+        $asrMeta = get_post_meta($post_id);
+        $asrPost = [
+            'cpt' => $asrPost,
+            'meta' => $asrMeta,
+            'source' => 'db',
+            'source_comment' => 'hard from db via '.__METHOD__,
+        ];
+        //$asrPost = json_decode(json_encode($asrPost));// just to normalize and help with testing.  Should totally be able to unwind this.
+        return $asrPost;
+    }
+
+    static function asrCompoundPosts_via_db() {
+        $args = array('post_type' => static::$post_type,
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+            'order' => 'ASC');
+        $page_query = new WP_Query($args);
+
+        $asrCompoundPosts = [];
+
+        foreach ($page_query->posts as $objPost) {
+
+            $asrCompoundPosts[$objPost->post_name] = [];
+            $asrCompoundPosts[$objPost->post_name]['cpt'] = static::asrPost_via_id($objPost->ID);
+            $asrCompoundPosts[$objPost->post_name]['meta'] = get_post_meta($objPost->ID);
+            $asrCompoundPosts[$objPost->post_name]['source'] = 'db';
+            $asrCompoundPosts[$objPost->post_name]['source_comment'] = 'hard from db via '.__METHOD__;
+
+        }
+        return $asrCompoundPosts;
+    }
+
+    static function update_dbCompoundPost($post_id_to_update,$asrPostToImport) {
+
+        $ret = wp_update_post($asrPostToImport['cpt'],true);
+        if (is_wp_error($ret)) {
+            $errors = $ret->get_error_messages();
+            foreach ($errors as $error) {
+                echo $error;
+            }
+        }
+        foreach ($asrPostToImport['meta'] as $key=>$val) {
+            update_post_meta($post_id_to_update,$key,$val[0]);
+        }
+
+        echo "<div class='updated'>
+                <p>I just totally totally did importing of {$_REQUEST['import_post_name']} via json into the db - but really need to make the query a one-time thing.</p>
+                </div>";
+    }
+
+    static function serFile_asrCompoundPost_via_id($post_id) {
+        return json_encode(static::asrCompoundPost_via_id($post_id));
+    }
+
+
+    static function get_net_asrCompountPosts() {
+        // posts from cached db
+        $asrDbPosts = static::asrCompoundPosts_via_db();
+
+        // posts from cached files
+        $asrMocks = static::asrCompoundPosts_via_serFiles();
+
+        $asrOnlyJson = [];
+
+        // Missing Fields
+        $arrKeysFromFiles = array_keys($asrMocks);
+        $arrKeysFromDb = array_keys($asrDbPosts);
+        $keysInDbButNotFiles = array_diff($arrKeysFromDb, $arrKeysFromFiles);
+        $keysInFilesButNotDb = array_diff($arrKeysFromFiles,$arrKeysFromDb);
+        #$keysInEither = array_merge($arrKeysFromFiles,$arrKeysFromDb);
+        $keysInBoth = array_intersect($arrKeysFromFiles,$arrKeysFromDb);
+
+
+        // for keys in both, figure out which to use
+        $asrNetPosts =[];
+        foreach ($keysInDbButNotFiles as $key) {
+            $asrNetPosts[$key] = $asrDbPosts[$key];
+            $asrNetPosts[$key]['source'] = 'db';
+            $asrNetPosts[$key]['source_heritage'] = 'db only';
+            $asrNetPosts[$key]['source_comment'] = 'there is only a db source (no json), so we really have no choice';
+            //$asrNetPosts[$key]['meta'] = get_post_meta($post->ID);
+        }
+
+        foreach ($keysInFilesButNotDb as $key) {
+            $asrNetPosts[$key] = $asrMocks[$key];
+            $asrNetPosts[$key]['source ']= 'json';
+            $asrNetPosts[$key]['source_heritage'] = 'json only';
+            $asrNetPosts[$key]['source_comment'] = "only json, plugin=>{$asrMocks[$key]['plugin_basename']}";
+            $asrOnlyJson[$key] = $asrNetPosts[$key];
+        }
+
+        foreach ($keysInBoth as $key) {
+            $modifiedDb = $asrDbPosts[$key]['cpt']['post_modified_gmt'];
+            $modifiedJson = $asrMocks[$key]['cpt']['post_modified_gmt'];
+
+            if ($modifiedDb > $modifiedJson) {
+                $asrNetPosts[$key] = $asrDbPosts[$key];
+                $asrNetPosts[$key]['source'] = 'db';
+                $asrNetPosts[$key]['source_heritage'] = 'db > json';
+
+                $asrNetPosts[$key]['source_comment'] = "post_modified_gmt $modifiedDb > $modifiedJson so db!";
+
+            } else if ($modifiedDb == $modifiedJson) {
+                $asrNetPosts[$key] = $asrMocks[$key];
+                $asrNetPosts[$key]['source'] = 'json';
+                $asrNetPosts[$key]['source_heritage'] = 'db < json';
+                $asrNetPosts[$key]['source_comment'] = "post_modified_gmt $modifiedDb == $modifiedJson so using json for safety. plugin=>{$asrMocks[$key]['plugin_basename']}";
+
+            } else if ($modifiedDb < $modifiedJson) {
+                $asrNetPosts[$key] = $asrMocks[$key];
+                $asrNetPosts[$key]['source'] = "json";
+                $asrNetPosts[$key]['source_heritage'] = 'db == json';
+
+                $asrNetPosts[$key]['source_comment'] = "post_modified_gmt $modifiedDb < $modifiedJson so json!";
+            } else {
+
+                print "dates are whacked: ".__FILE__.__METHOD__.__LINE__;
+            }
+
+        }
+
+        $asr = [
+            'asrNetPosts' => $asrNetPosts,
+            'asrJsonPosts' => $asrMocks,
+            'asrDbPosts' => $asrDbPosts,
+            'asrOnlyJson' => $asrOnlyJson,
+            'arrBoth' => $keysInBoth,
+            #'page_query_to_use' => $page_query
+        ];
+
+        return $asr; // CPTs with data from db used over data from json.  If data isn't in db, json is used.  j
+
+    }
     // ============== jjr Caching Helpers -END- ====================================================================
 
 
@@ -693,50 +826,44 @@ class acfOptionsPageAdder {
         if (!function_exists('acf_add_options_sub_page')) {
             return;
         }
+        error_reporting(-1);
+        ini_set('display_errors', 'On');
         // get all the options pages and add them
         $options_pages = array('top' => array(), 'sub' => array());
-        $page_query = $this->get_netted_obj_posts();
+        $asrPosts = static::get_net_asrCompountPosts()['asrNetPosts'];
 
-        // output: $page_query, either from db, or cache, as appropriate
+        if (count($asrPosts)) {
+            foreach ($asrPosts as $key=>$asrPost) {
 
-        if (count($page_query->posts)) {
-            foreach ($page_query->posts as $post) {
-                $id = $post->ID;
 
-//                    print "<br>In loop, examine post($id) ==> <pre>";
-//                    $asrMeta = get_post_meta($id);//jjr
-//                    print_r($post);
-//                    print "<br> Meta ==>";
-//                    print_r($asrMeta);
-//                    print  "</pre>";
-                $title = get_the_title($id);
-                $menu_text = trim(get_post_meta($id, '_acfop_menu', true));
+                $title = $asrPost['cpt']['post_title'];
+                $menu_text = trim($asrPost['meta']['_acfop_menu'][0]);
                 if (!$menu_text) {
                     $menu_text = $title;
                 }
-                $slug = trim(get_post_meta($id, '_acfop_slug', true));
+                $slug = trim($asrPost['meta']['_acfop_slug'][0]);
                 if (!$slug) {
                     $slug = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $title), '-'));
                 }
-                $parent = get_post_meta($id, '_acfop_parent', true);
-                $capability = get_post_meta($id, '_acfop_capability', true);
+
+                $parent = $asrPost['meta']['_acfop_parent'][0];
+                $capability = $asrPost['meta']['_acfop_capability'][0];
 
 
-                //print "<br> $title, $menu_text, $slug, $parent, $capability";
                 if ($parent == 'none') {
                     $options_page = array('page_title' => $title,
                         'menu_title' => $menu_text,
                         'menu_slug' => $slug,
                         'capability' => $capability);
                     $redirect = true;
-                    $value = get_post_meta($id, '_acfop_redirect', true);
+                    $value = $asrPost['meta']['_acfop_redirect'][0];
                     if ($value == '0') {
                         $redirect = false;
                     }
                     $options_page['redirect'] = $redirect;
 
                     $icon = '';
-                    $value = get_post_meta($id, '_acfop_icon', true);
+                    $value = $asrPost['meta']['_acfop_icon'][0];
                     if ($value != '') {
                         $icon = $value;
                     }
@@ -745,7 +872,7 @@ class acfOptionsPageAdder {
                     }
 
                     $menu_position = '';
-                    $value = get_post_meta($id, '_acfop_position', true);
+                    $value = $asrPost['meta']['_acfop_position'][0];
                     if ($value != '') {
                         $menu_position = $value;
                     }
@@ -756,7 +883,7 @@ class acfOptionsPageAdder {
                     $options_pages['top'][] = $options_page;
                 } else {
                     $order = 0;
-                    $value = get_post_meta($id, '_acfop_order', true);
+                    $value = $asrPost['meta']['_acfop_order'][0];
                     if ($value) {
                         $order = $value;
                     }
@@ -770,16 +897,12 @@ class acfOptionsPageAdder {
             } // end foreach $post;
         } // end if have_posts
         wp_reset_query();
-        #echo '<pre>'; print_r($options_pages); die;
         if (count($options_pages['top'])) {
             foreach ($options_pages['top'] as $options_page) {
                 acf_add_options_page($options_page);
             }
         }
         if (count($options_pages['sub'])) {
-//                print "<br>options_pages==> <pre>";
-//                print_r($options_pages);
-//                print  "</pre>";
 
 
             usort($options_pages['sub'], array($this, 'sort_by_order'));
@@ -788,9 +911,9 @@ class acfOptionsPageAdder {
                 acf_add_options_sub_page($options_page);
             }
         }
+        ini_set('display_errors', 'Off');
+
     } // end private function acf_add_options_pages
 
 } // end class acfOptionsPageAdder
 
-//jjr
-//require_once(__DIR__ . "/jSins.php");
