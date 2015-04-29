@@ -449,7 +449,7 @@ class acfOptionsPageAdder {
                     if ( $the_row_post_name == $a_post_name) {
                         $hasHtml = '';
 
-                        $hasHtml .= "<span title='{$asrPost['source_comment']}'>{$asrPost['source_heritage']}^</span>";
+                        $hasHtml .= "<span title='{$asrPost['source_comment']}'>$a_post_name) {$asrPost['source_heritage']}^</span>";
                         if ($asrPost['source_heritage'] == 'db < json') {
                             $url = add_query_arg(["import_post_id"=> $post_id, "import_post_name"=> $a_post_name]);
                             $hasHtml .= " <a href='$url'>Click to update db with latest json</a>";
@@ -476,20 +476,25 @@ class acfOptionsPageAdder {
                     $html .= "<hr>==JSON only items that shouldn't be repeated each ,==<br>";
                 }
                 foreach ($asrPosts['asrOnlyJson'] as $a_post_name => $asrPost) {
-                    $hasHtml = '';
-                    $innerText = '';
-                    $title = '';
-                    $modText = '';
-                    $name = $asrPost->cpt->post_name;
-                    $innerText = "$name (pure json^)";// -->{$asrPosts['asrJsonPosts'][$this_post_name]->plugin_basename})";
-                    $modText = $asrPost->cpt->post_modified_gmt;
-                    $title = "modifed= $modText, src file = ".$asrPosts['asrJsonPosts'][$a_post_name]->plugin_basename;
-                    $hasHtml .= "<span title='$title'>$innerText</span>";
-                    $srcText = $asrPost->source;// ouch - this is embarrassing.  Say spegehtii!
-                    $src_comment = $asrPost->source_comment;
-                    $usesText = "<-- uses $srcText";
-                    $usesHtml = " <span title='$src_comment'>$usesText^</span>";
-                    $html .= " $hasHtml $usesHtml<br>";//"<span title='$title'>$innerText</span> ";
+                    $hasHtml = "<span title=''>$a_post_name) {$asrPost['source_heritage']}^ {$asrPost['source_comment']}</span>";
+                    $url = add_query_arg(["import_post_id"=> $post_id, "import_post_name"=> $a_post_name]);
+                    $hasHtml .= " <a href='$url'>Click to update db with latest json</a>";
+                    $html .= $hasHtml;
+//
+//                    $hasHtml = '';
+//                    $innerText = '';
+//                    $title = '';
+//                    $modText = '';
+//                    $name = $asrPost->cpt->post_name;
+//                    $innerText = "$name (pure json^)";// -->{$asrPosts['asrJsonPosts'][$this_post_name]->plugin_basename})";
+//                    $modText = $asrPost->cpt->post_modified_gmt;
+//                    $title = "modifed= $modText, src file = ".$asrPosts['asrJsonPosts'][$a_post_name]->plugin_basename;
+//                    $hasHtml .= "<span title='$title'>$innerText</span>";
+//                    $srcText = $asrPost->source;// ouch - this is embarrassing.  Say spegehtii!
+//                    $src_comment = $asrPost->source_comment;
+//                    $usesText = "<-- uses $srcText";
+//                    $usesHtml = " <span title='$src_comment'>$usesText^</span>";
+//                    $html .= " $hasHtml $usesHtml<br>";//"<span title='$title'>$innerText</span> ";
 
                 }
 
@@ -604,6 +609,7 @@ class acfOptionsPageAdder {
     // ============== jjr Caching Helpers -begin- ==================================================================
     // This is largely about optionally persisting what we got from the db and being able to read the persisted form.
     // for some reason, I had issues simply serializing - so we put everything into json - which isn't great, but not bad.
+    //  [ ] Let json w/o db entries work.
     // Nice TODO: if WP_ENV isn't defined (in the wp-config), put a warning on this page
     // TODO: If templates are installed, make all non-masters be templates ??
     // TODO: Make this a stand-alone plugin
@@ -791,13 +797,13 @@ class acfOptionsPageAdder {
             } else if ($modifiedDb == $modifiedJson) {
                 $asrNetPosts[$key] = $asrMocks[$key];
                 $asrNetPosts[$key]['source'] = 'json';
-                $asrNetPosts[$key]['source_heritage'] = 'db < json';
+                $asrNetPosts[$key]['source_heritage'] = 'db == json';
                 $asrNetPosts[$key]['source_comment'] = "post_modified_gmt $modifiedDb == $modifiedJson so using json for safety. plugin=>{$asrMocks[$key]['plugin_basename']}";
 
             } else if ($modifiedDb < $modifiedJson) {
                 $asrNetPosts[$key] = $asrMocks[$key];
                 $asrNetPosts[$key]['source'] = "json";
-                $asrNetPosts[$key]['source_heritage'] = 'db == json';
+                $asrNetPosts[$key]['source_heritage'] = 'db < json';
 
                 $asrNetPosts[$key]['source_comment'] = "post_modified_gmt $modifiedDb < $modifiedJson so json!";
             } else {
