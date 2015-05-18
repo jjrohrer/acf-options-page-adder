@@ -610,7 +610,6 @@ class acfOptionsPageAdder {
     // This is largely about optionally persisting what we got from the db and being able to read the persisted form.
     // for some reason, I had issues simply serializing - so we put everything into json - which isn't great, but not bad.
     //  [ ] Let json w/o db entries work.
-    //  TODO: We can't see anything if there are zero rows - this a real problem
     // Nice TODO: if WP_ENV isn't defined (in the wp-config), put a warning on this page
     // TODO: If templates are installed, make all non-masters be templates ??
     // TODO: Make this a stand-alone plugin
@@ -918,6 +917,8 @@ class acfOptionsPageAdder {
                 acf_add_options_sub_page($options_page);
             }
         }
+        // not sure if possible echo '<br>'.__FILE__.__LINE__.'<div id="theme-options-wrap">    <div class="icon32" id="icon-tools"> <br /> </div>    <h2>My Theme Options</h2>    <p>Take control of your theme, by overriding the default settings with your own specific preferences.</p>   ';
+
         ini_set('display_errors', 'Off');
 
     } // end private function acf_add_options_pages
