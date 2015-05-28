@@ -579,7 +579,7 @@ class acfOptionsPageAdder {
             'public' => false,
             'show_ui' => true,
             'show_in_menu' => true,
-            'capability_type' => 'post',
+            'capability_type' => 'post',//jjr post
             'map_meta_cap' => true,
             'hierarchical' => false,
             'rewrite' => array('slug' => static::$post_type, 'with_front' => false),
@@ -833,7 +833,7 @@ class acfOptionsPageAdder {
             return;
         }
         error_reporting(-1);
-        ini_set('display_errors', 'On');
+        ini_set('display_errors', 'Off');
         // get all the options pages and add them
         $options_pages = array('top' => array(), 'sub' => array());
         $asrPosts = static::get_net_asrCompountPosts()['asrNetPosts'];

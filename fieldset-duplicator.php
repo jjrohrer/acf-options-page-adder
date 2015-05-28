@@ -613,7 +613,7 @@
 										'has_archive' => false,
 										'show_ui' => true,
 										'show_in_menu' => 'edit.php?post_type='.$options_page_post_type,
-										'capability_type' => 'post',
+                'capability_type' => 'post',//jjr post
 										'map_meta_cap' => true,
 										'hierarchical' => false,
 										'rewrite' => array('slug' => $this->post_type, 'with_front' => true),
